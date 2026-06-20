@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Aadhaar Copy Alignment Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.41.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script async src="https://docs.opencv.org/4.5.4/opencv.js" id="opencv-js"></script>
+    <style>
+        /* A4 Page styling for accurate live preview matching physical print dimensions */
+        .a4-page {
+            width: 210mm;
+            height: 297mm;
+            background: white;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            margin: 0 auto;
+            position: relative;
+            box-sizing: border-box;
+            padding: 20mm;
+        }
+        .card-container {
+            width: 86mm;
+            height: 54mm;
+            border: 1px dashed #cbd5e1;
+            position: relative;
+            overflow: hidden;
+            background: #f8fafc;
+            cursor: move;
+        }
+        @media print {
+            body * { visibility: hidden; }
+            #preview-section, #preview-section * { visibility: visible; }
+            #preview-section { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased pb-12">
+
+    <header class="bg-gradient-to-r from-blue-700 to-indigo-800 text-white py-6 px-4 shadow-md text-center">
+        <h1 class="text-3xl font-bold tracking-wide">Aadhaar Copy Alignment & Layout Tool</h1>
+        <p class="text-sm opacity-90 mt-2">Correct skew, align, and organize front & back sides into a printable A4 layout securely.</p>
+        <span class="inline-block mt-3 bg-blue-600/50 text-xs px-3 py-1 rounded-full border border-blue-400/30">🔒 Client-Side Only: No data is uploaded to any server.</span>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <div class="lg:col-span-5 space-y-6">
+            
+            <div class="bg-white p-5 rounded-xl shadow-xs border border-slate-200">
+                <label class="block text-sm font-semibold text-slate-700 mb-3">1. Select Side to Adjust</label>
+                <div class="flex gap-4">
+                    <button id="btn-select-front" onclick="switchSide('front')" class="flex-1 py-2.5 px-4 rounded-lg font-medium border-2 border-blue-600 bg-blue-50 text-blue-700 transition">Front Side</button>
+                    <button id="btn-select-back" onclick="switchSide('back')" class="flex-1 py-2.5 px-4 rounded-lg font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition">Back Side</button>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-xs border border-slate-200">
+                <label class="block text-sm font-semibold text-slate-700 mb-3">2. Upload Image</label>
+                <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-500 transition bg-slate-50 cursor-pointer">
+                    <input type="file" id="file-input" accept="image/*" class="hidden">
+                    <div class="space-y-2">
+                        <svg class="mx-auto h-12 w-12 text-slate-400" stroke="currentColor" fill="none" viewBox="0 0 48 48"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4-4m4 24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                        <p class="text-sm text-slate-600"><span class="text-blue-600 font-medium">Click to upload</span> or drag and drop</p>
+                        <p class="text-xs text-slate-400">Supports JPG, PNG (Front/Back uploaded separately)</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-xs border border-slate-200 space-y-5">
+                <div class="flex items-center justify-between">
+                    <label class="text-sm font-semibold text-slate-700">3. Alignment & Adjustments</label>
+                    <button id="btn-autofix" onclick="triggerAutoFix()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow-xs transition inline-flex items-center gap-1">
+                        ✨ Auto Fix Skew
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="rotate90(-90)" class="py-2 px-3 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-1">🔄 Left 90°</button>
+                    <button onclick="rotate90(90)" class="py-2 px-3 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-1">🔄 Right 90°</button>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs text-slate-500 mb-1">
+                        <span>Fine Rotation</span>
+                        <span id="rotation-val">0°</span>
+                    </div>
+                    <input type="range" id="slider-rotate" min="-45" max="45" value="0" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs text-slate-500 mb-1">
+                        <span>Zoom Scale</span>
+                        <span id="zoom-val">100%</span>
+                    </div>
+                    <input type="range" id="slider-zoom" min="50" max="250" value="100" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                </div>
+
+                <button onclick="resetCurrentTransformations()" class="w-full py-2 border border-rose-200 text-rose-600 bg-rose-50 rounded-lg text-xs font-semibold hover:bg-rose-100 transition">Reset Current Side Changes</button>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-xs border border-slate-200 space-y-3">
+                <label class="block text-sm font-semibold text-slate-700 mb-1">4. Document Actions</label>
+                <button onclick="exportDocument('pdf')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium transition shadow-xs flex items-center justify-center gap-2">💾 Save as PDF (A4)</button>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="exportDocument('jpg')" class="py-2.5 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition shadow-xs">🖼️ Save JPG</button>
+                    <button onclick="window.print()" class="py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition shadow-xs">🖨️ Print Direct</button>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col items-center">
+            <h2 class="text-sm font-semibold text-slate-500 mb-3 self-start lg:self-center">Live Document Layout Preview (Standard A4 Portrait)</h2>
+            
+            <canvas id="hidden-cv-canvas" class="hidden"></canvas>
+            
+            <div id="preview-section" class="a4-page border border-slate-300 flex flex-col items-center justify-start gap-12 pt-24 shadow-2xl overflow-hidden scale-75 md:scale-90 lg:scale-100 origin-top">
+                
+                <div class="text-center">
+                    <span class="text-xs text-slate-400 uppercase tracking-widest font-semibold block mb-1">Front Side</span>
+                    <div id="container-front" class="card-container rounded-md" onmousedown="startDrag(event, 'front')" ontouchstart="startDrag(event, 'front')">
+                        <img id="img-front" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><text x='50%' y='54%' font-size='10' fill='%2394a3b8' font-family='sans-serif' text-anchor='middle'>Front Side Image Missing</text></svg>" class="absolute max-w-none origin-center pointer-events-none select-none">
+                    </div>
+                </div>
+
+                <div class="text-center">
+                    <span class="text-xs text-slate-400 uppercase tracking-widest font-semibold block mb-1">Back Side</span>
+                    <div id="container-back" class="card-container rounded-md" onmousedown="startDrag(event, 'back')" ontouchstart="startDrag(event, 'back')">
+                        <img id="img-back" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><text x='50%' y='54%' font-size='10' fill='%2394a3b8' font-family='sans-serif' text-anchor='middle'>Back Side Image Missing</text></svg>" class="absolute max-w-none origin-center pointer-events-none select-none">
+                    </div>
+                </div>
+
+                <div class="absolute bottom-6 left-6 right-6 border-t border-slate-100 pt-4 flex justify-between text-[10px] text-slate-400 uppercase font-medium">
+                    <span>Aadhaar Print Formatter</span>
+                    <span>No data is sent/processed on the server side</span>
+                    <span>Scale Match 1:1</span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let currentSide = 'front';
+        
+        // Transformational States for both card segments
+        const state = {
+            front: { file: null, zoom: 100, rotate: 0, clickRotate: 0, x: 0, y: 0, originalW: 0, originalH: 0 },
+            back:  { file: null, zoom: 100, rotate: 0, clickRotate: 0, x: 0, y: 0, originalW: 0, originalH: 0 }
+        };
+
+        // Drag tracking values
+        let isDragging = false;
+        let startX, startY;
+
+        // UI Listeners initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            setupUploadHandlers();
+            setupSliders();
+            setupGlobalDragHandlers();
+        });
+
+        function switchSide(side) {
+            currentSide = side;
+            document.getElementById('btn-select-front').className = side === 'front' ? 'flex-1 py-2.5 px-4 rounded-lg font-medium border-2 border-blue-600 bg-blue-50 text-blue-700 transition' : 'flex-1 py-2.5 px-4 rounded-lg font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition';
+            document.getElementById('btn-select-back').className = side === 'back' ? 'flex-1 py-2.5 px-4 rounded-lg font-medium border-2 border-blue-600 bg-blue-50 text-blue-700 transition' : 'flex-1 py-2.5 px-4 rounded-lg font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition';
+            
+            // Sync slider UI elements with structural state
+            document.getElementById('slider-rotate').value = state[side].rotate;
+            document.getElementById('rotation-val').innerText = `${state[side].rotate}°`;
+            document.getElementById('slider-zoom').value = state[side].zoom;
+            document.getElementById('zoom-val').innerText = `${state[side].zoom}%`;
+        }
+
+        function setupUploadHandlers() {
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('file-input');
+
+            dropZone.onclick = () => fileInput.click();
+            dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('border-blue-500'); };
+            dropZone.ondragleave = () => dropZone.classList.remove('border-blue-500');
+            dropZone.ondrop = (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-blue-500');
+                if (e.dataTransfer.files.length) processUploadedFile(e.dataTransfer.files[0]);
+            };
+            fileInput.onchange = (e) => {
+                if (e.target.files.length) processUploadedFile(e.target.files[0]);
+            };
+        }
+
+        function processUploadedFile(file) {
+            if (!file.type.startsWith('image/')) return alert('Please upload an image file format.');
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const imgNode = document.getElementById(`img-${currentSide}`);
+                imgNode.src = event.target.result;
+                imgNode.onload = function() {
+                    state[currentSide].file = file;
+                    state[currentSide].originalW = this.naturalWidth;
+                    state[currentSide].originalH = this.naturalHeight;
+                    autoCenterFit(currentSide);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function autoCenterFit(side) {
+            const container = document.getElementById(`container-${side}`);
+            const imgNode = document.getElementById(`img-${side}`);
+            
+            // Standard bounding calculation setup
+            const aspect = state[side].originalW / state[side].originalH;
+            if (aspect > (86/54)) {
+                imgNode.style.height = '100%';
+                imgNode.style.width = 'auto';
+            } else {
+                imgNode.style.width = '100%';
+                imgNode.style.height = 'auto';
+            }
+            
+            // Re-center translation resets
+            state[side].x = 0;
+            state[side].y = 0;
+            state[side].zoom = 100;
+            state[side].rotate = 0;
+            state[side].clickRotate = 0;
+            
+            if (currentSide === side) {
+                document.getElementById('slider-zoom').value = 100;
+                document.getElementById('slider-rotate').value = 0;
+                document.getElementById('rotation-val').innerText = '0°';
+                document.getElementById('zoom-val').innerText = '100%';
+            }
+            applyTransforms(side);
+        }
+
+        function setupSliders() {
+            document.getElementById('slider-rotate').oninput = (e) => {
+                state[currentSide].rotate = parseInt(e.target.value);
+                document.getElementById('rotation-val').innerText = `${e.target.value}°`;
+                applyTransforms(currentSide);
+            };
+            document.getElementById('slider-zoom').oninput = (e) => {
+                state[currentSide].zoom = parseInt(e.target.value);
+                document.getElementById('zoom-val').innerText = `${e.target.value}%`;
+                applyTransforms(currentSide);
+            };
+        }
+
+        function rotate90(degree) {
+            state[currentSide].clickRotate += degree;
+            applyTransforms(currentSide);
+        }
+
+        function resetCurrentTransformations() {
+            autoCenterFit(currentSide);
+        }
+
+        function applyTransforms(side) {
+            const imgNode = document.getElementById(`img-${side}`);
+            const totalRotation = state[side].clickRotate + state[side].rotate;
+            const currentScale = state[side].zoom / 100;
+            
+            // Translate offsets and rotation properties safely bundled
+            imgNode.style.transform = `translate(${state[side].x}px, ${state[side].y}px) rotate(${totalRotation}deg) scale(${currentScale})`;
+        }
+
+        /* Interactive Canvas Drag Controls Setup */
+        function startDrag(e, side) {
+            e.preventDefault();
+            if(!state[side].file) return;
+            switchSide(side);
+            isDragging = true;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            startX = clientX - state[side].x;
+            startY = clientY - state[side].y;
+        }
+
+        function setupGlobalDragHandlers() {
+            const moveHandler = (e) => {
+                if (!isDragging) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                state[currentSide].x = clientX - startX;
+                state[currentSide].y = clientY - startY;
+                applyTransforms(currentSide);
+            };
+            const stopHandler = () => { isDragging = false; };
+
+            window.addEventListener('mousemove', moveHandler);
+            window.addEventListener('mouseup', stopHandler);
+            window.addEventListener('touchmove', moveHandler, { passive: false });
+            window.addEventListener('touchend', stopHandler);
+        }
+
+        /* Computer Vision Skew Correction Implementation */
+        function triggerAutoFix() {
+            if (!state[currentSide].file) return alert('Please upload an image first.');
+            if (typeof cv === 'undefined' || !cv.Mat) return alert('OpenCV.js engine optimization framework is still caching. Please wait a moment and try again.');
+            
+            const imgNode = document.getElementById(`img-${currentSide}`);
+            const src = cv.imread(imgNode);
+            const dst = new cv.Mat();
+            
+            // Color Conversion & Grayscale pipeline optimization
+            cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY, 0);
+            cv.GaussianBlur(dst, dst, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+            cv.Canny(dst, dst, 75, 200, 3, false);
+            
+            let contours = new cv.MatVector();
+            let hierarchy = new cv.Mat();
+            cv.findContours(dst, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            
+            let maxArea = 0;
+            let maxContourIndex = -1;
+            for (let i = 0; i < contours.size(); ++i) {
+                let area = cv.contourArea(contours.get(i));
+                if (area > maxArea) {
+                    maxArea = area;
+                    maxContourIndex = i;
+                }
+            }
+            
+            if (maxContourIndex !== -1) {
+                let contour = contours.get(maxContourIndex);
+                let approx = new cv.Mat();
+                let peri = cv.arcLength(contour, true);
+                cv.approxPolyDP(contour, approx, 0.02 * peri, true);
+                
+                // If the dynamic matrix isolates 4 clean vertices (Quadrilateral Card Boundary)
+                if (approx.rows === 4) {
+                    let pts = [];
+                    for (let i = 0; i < 4; i++) {
+                        pts.push({ x: approx.data32S[i * 2], y: approx.data32S[i * 2 + 1] });
+                    }
+                    
+                    // Sorting structural alignment positions logically
+                    pts.sort((a, b) => a.x - b.x);
+                    let leftPairs = [pts[0], pts[1]].sort((a, b) => a.y - b.y);
+                    let rightPairs = [pts[2], pts[3]].sort((a, b) => a.y - b.y);
+                    
+                    let tl = leftPairs[0], bl = leftPairs[1];
+                    let tr = rightPairs[0], br = rightPairs[1];
+                    
+                    // Transform Perspective Coordinates setup
+                    let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.br || br.y, bl.x, bl.y]);
+                    const outW = 640, outH = 400; 
+                    let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, outW, 0, outW, outH, 0, outH]);
+                    
+                    let M = cv.getPerspectiveTransform(srcTri, dstTri);
+                    let warped = new cv.Mat();
+                    cv.warpPerspective(src, warped, M, new cv.Size(outW, outH));
+                    
+                    // Write back isolated aligned matrix to the document preview DOM context
+                    const cvCanvas = document.getElementById('hidden-cv-canvas');
+                    cv.imshow(cvCanvas, warped);
+                    imgNode.src = cvCanvas.toDataURL();
+                    
+                    // Reset spatial coordinates system to snap directly to grid container
+                    imgNode.onload = function() {
+                        state[currentSide].originalW = outW;
+                        state[currentSide].originalH = outH;
+                        autoCenterFit(currentSide);
+                    };
+                    
+                    warped.delete(); M.delete(); srcTri.delete(); dstTri.delete(); approx.delete();
+                } else {
+                    alert("A precise boundary matrix edge could not be mapped out. Manual zoom/slider adjustments are unlocked for finer tuning optimization.");
+                }
+            } else {
+                alert("No high-contrast edge bounds identified. Please manually center/rotate your image input using the controls panel.");
+            }
+            
+            src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
+        }
+
+        /* Document Compilation and Multi-Format Exports Section */
+        function exportDocument(format) {
+            const previewTarget = document.getElementById('preview-section');
+            
+            // Temporarily standardise dynamic transformations for clear capture resolution
+            const dynamicScaleContainer = previewTarget.style.transform;
+            previewTarget.style.transform = "none";
+            
+            const captureOptions = {
+                scale: 2, // High DPI capture matrix acceleration
+                useCORS: true,
+                allowTaint: true,
+                logging: false
+            };
+
+            html2canvas(previewTarget, captureOptions).then(canvas => {
+                // Restore client-side responsive preview scaling context immediately
+                previewTarget.style.transform = dynamicScaleContainer;
+                
+                if (format === 'jpg') {
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                    const link = document.createElement('a');
+                    link.download = `Aadhaar_Aligned_Layout_${Date.now()}.jpg`;
+                    link.href = dataUrl;
+                    link.click();
+                } 
+                else if (format === 'pdf') {
+                    const { jsPDF } = window.jspdf;
+                    const pdfDoc = new jsPDF({
+                        orientation: 'portrait',
+                        unit: 'mm',
+                        format: 'a4'
+                    });
+                    
+                    const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                    // Match dimensions perfectly with 1:1 physical specifications
+                    pdfDoc.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+                    pdfDoc.save(`Aadhaar_Print_Ready_${Date.now()}.pdf`);
+                }
+            }).catch(err => {
+                console.error("Export Engine Exception Context:", err);
+                previewTarget.style.transform = dynamicScaleContainer;
+            });
+        }
+    </script>
+</body>
+</html>
